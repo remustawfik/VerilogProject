@@ -17,8 +17,6 @@ output [9:0] LEDR;
 
 wire [8:0] xVGA;
 wire [7:0] yVGA;
-wire [8:0] xCtrl;
-wire [7:0] yCtrl;
 wire [2:0] colourVGA;
 wire [13:0] address;
 wire [2:0] addressColour;
@@ -31,14 +29,14 @@ wire plot,reset,start;
 wire Ddraw,Dwait,Ddel;
 
 //control output flags
-wire Swait,Sdel,SresetDel;
+wire Swait,Sdel,SresetDel,Cycle;
 
 
 assign reset = KEY[0];
 assign start = ~KEY[1];
 assign LEDR[0] = Ddraw; 
 
-Boxer cat(address,CLOCK_50,3'b000,1'b0,addressColour);
+centerpose cat(address,CLOCK_50,3'b000,1'b0,addressColour);
 
 assign colourVGA = Sdel ? 3'b000 : addressColour;
 assign plot = 1'b1;
@@ -64,18 +62,16 @@ vga_adapter VGA(
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
 		defparam VGA.BACKGROUND_IMAGE = "bannertoo.mif";
 		
-control pupperz(CLOCK_50,reset,Ddraw,Ddel,Dwait,start,xCtrl,yCtrl,Sdel,Swait,SresetDel);
-datapath PUPPER(CLOCK_50,reset,start,Ddraw,Ddel,Dwait,xCtrl,yCtrl,xVGA,yVGA,address,Sdel,Swait,SresetDel);
+control pupperz(CLOCK_50,reset,Ddraw,Ddel,Dwait,start,Sdel,Swait,SresetDel,Cycle);
+datapath PUPPER(CLOCK_50,reset,start,Ddraw,Ddel,Dwait,xVGA,yVGA,address,Sdel,Swait,SresetDel,Cycle);
 			
 endmodule 
 
 //-------------------------------------------------------------------------------------
-module control(clk,reset,DoneDraw,DoneDel,DoneWait,PlotCtrl,xout,yout,startDel,startWait,startresetDel);
+module control(clk,reset,DoneDraw,DoneDel,DoneWait,PlotCtrl,startDel,startWait,startresetDel,cycle);
 
 input clk,reset,DoneDraw,PlotCtrl,DoneDel,DoneWait;
-output reg [8:0] xout;
-output reg [7:0] yout;
-output reg startDel,startWait,startresetDel;
+output reg startDel,startWait,startresetDel,cycle;
 
 
 
@@ -95,7 +91,10 @@ reg [5:0] current_state, next_state;
 				 
 			  case (current_state)
 					  
-				S_Reset: next_state =  PlotCtrl ? S_StartAnimation: S_Reset;
+				S_Reset: if((PlotCtrl == 1'b1) | (cycle==1'b1))
+					       next_state = S_StartAnimation;
+							 else
+							 next_state = S_Reset;
 				
 				S_StartAnimation: next_state = S_Center;
 				
@@ -122,12 +121,11 @@ reg [5:0] current_state, next_state;
            
 	
 	S_Center: begin
-	
-	xout = 9'd120;
-	yout = 8'd70;
+
 	startDel = 1'b0;
 	startWait = 1'b0;
 	startresetDel = 1'b0;
+	cycle = 1'b0;
 	
 	end
 	
@@ -136,6 +134,7 @@ reg [5:0] current_state, next_state;
 	startWait = 1'b1;
 	startDel = 1'b0;
 	startresetDel = 1'b1;
+	cycle = 1'b0;
 	
 	end
 	
@@ -144,10 +143,18 @@ reg [5:0] current_state, next_state;
 	startDel = 1'b1;
 	startWait = 1'b0;
 	startresetDel = 1'b0;
+	cycle = 1'b0;
 
 	end
 	
+	S_Done: begin
 	
+	startDel = 1'b0;
+	startWait = 1'b0;
+   startresetDel = 1'b0;
+   cycle = 1'b1;	
+	
+	end
 	
 endcase
 end
@@ -171,12 +178,9 @@ always@(posedge clk)
  //----------------------------------------------------------------------------------------------
  
  
- module datapath(clk,resetData,Plot,DoneDrawing,DoneDeleting,DoneWaiting,Xin,Yin,Xout,Yout,Drawcount,startDelete,startWait,startresDel);
+ module datapath(clk,resetData,Plot,DoneDrawing,DoneDeleting,DoneWaiting,Xout,Yout,Drawcount,startDelete,startWait,startresDel,cyc);
  
- input clk,resetData,Plot,startDelete,startWait,startresDel;
- 
- input [8:0] Xin;
- input [7:0] Yin;
+ input clk,resetData,Plot,startDelete,startWait,startresDel,cyc;
  
  //output flags
  output reg DoneDrawing,DoneDeleting;
@@ -187,15 +191,11 @@ always@(posedge clk)
  output reg [8:0] Xout;
  output reg [7:0] Yout;
  
- 
- wire [8:0] Xlimit;
- wire [7:0] Ylimit;
+
  reg [27:0] timer;
  
  wire clear1;
  
- assign Xlimit = Xin + 9'd80;
- assign Ylimit = Yin + 8'd120;
 
  //counts to 4 seconds
  
@@ -208,15 +208,15 @@ always@(posedge clk)
 	end
 
 	assign clear1 = DoneWaiting;
-	assign DoneWaiting = (timer == 28'd200000000) ? 1'b1 : 1'b0;
+	assign DoneWaiting = (timer == 28'd100000000) ? 1'b1 : 1'b0;
 
 //---------------------------------------------------------
  always@(posedge clk)
    begin
-				if(!resetData)
+				if(!resetData | cyc)
 					begin
-						Xout <= Xin;
-						Yout <= Yin;
+						Xout <= 9'd90;
+						Yout <= 8'd70;
 						DoneDrawing <= 1'b0;
 						Drawcount <= 14'd0;
 					end
@@ -224,24 +224,24 @@ always@(posedge clk)
 				if(startresDel)
 				begin
 						Xout <= 9'd0;
-						Yout <= 9'd70;
+						Yout <= 8'd70;
 						Drawcount <= 14'b0;
 						DoneDeleting <= 1'b0;
 				end
 	
-				if(Plot)
+				if((Plot == 1'b1) | (cyc == 1'b1))
 					begin
-						if(Xout == Xlimit && Yout < Ylimit)
+						if(Xout == 9'd220 && Yout < 8'd190)
 							begin
-							Xout <= Xin;
+							Xout <= 9'd90;
 							Yout <= Yout + 1'b1;
 							DoneDrawing <= 1'b0;
 							end
-						if(Yout == Ylimit)
+						if(Yout == 8'd190)
 							begin
 							DoneDrawing <= 1'b1;
 							end
-						if(Xout < Xlimit && Yout < Ylimit)
+						if(Xout < 9'd220 && Yout < 8'd190)
 							begin
 								Drawcount <= Drawcount + 1'b1;
 								Xout <= Xout + 1'b1;
@@ -250,18 +250,18 @@ always@(posedge clk)
 					end
 				 if(startDelete & !startresDel)
 						begin
-						if(Xout == 9'd320 && Yout < 9'd190)
+						if(Xout == 9'd320 && Yout < 8'd190)
 							begin
 							Xout <= 9'd0;
 							Yout <= Yout + 1'b1;
 							DoneDeleting <= 1'b0;
 							
 							end
-						if(Yout == 9'd190)
+						if(Yout == 8'd190)
 							begin
 							DoneDeleting <= 1'b1;
 							end
-						if(Xout < 9'd320 && Yout < 9'd190)
+						if(Xout < 9'd320 && Yout < 8'd190)
 							begin
 								Xout <= Xout + 1'b1;
 								DoneDeleting <= 1'b0;
