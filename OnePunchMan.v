@@ -39,7 +39,9 @@ output	[9:0]	VGA_G;	 				//	VGA Green[9:0]
 output	[9:0]	VGA_B;   				//	VGA Blue[9:0]
 
 
-Boxer cat(address,CLOCK_50,3'b000,1'b0,colourVGA);
+Boxer cat(address,CLOCK_50,3'b000,1'b0,addressColour);
+
+assign colourVGA = dataDel ? 3'b000 : addressColour;
 
 vga_adapter VGA(
 			.resetn(reset),
@@ -62,32 +64,30 @@ vga_adapter VGA(
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
 		defparam VGA.BACKGROUND_IMAGE = "bannertoo.mif";
 		
-		
-control pupperz(CLOCK_50,reset,SoDone,plotIt,center,right,xCtrl,yCtrl,dataDel,startDraw);
-datapath PUPPER(CLOCK_50,reset,plotIt,SoDone,xCtrl,yCtrl,xVGA,yVGA,address);	
+control pupperz(CLOCK_50,reset,SoDone,plotIt,center,right,xCtrl,yCtrl,dataDel);
+datapath PUPPER(CLOCK_50,reset,plotIt,SoDone,xCtrl,yCtrl,xVGA,yVGA,address,dataDel);	
 			
 endmodule 
 
 //-------------------------------------------------------------------------------------
-module control(clk,reset,DoneCtrl,PlotCtrl,centerflag,rightFlag,xout,yout,delpls,draw);
+module control(clk,reset,DoneCtrl,PlotCtrl,centerflag,deleteFlag,xout,yout,delpls);
 
-input clk,reset,DoneCtrl,PlotCtrl,centerflag,rightFlag;
-//input [2:0] cin;
+input clk,reset,DoneCtrl,PlotCtrl,centerflag,deleteFlag;
+//input [2:0] Cin;
 output reg [8:0] xout;
 output reg [7:0] yout;
-//output reg [2:0] cout;
-output reg delpls,draw;
+//output reg [2:0] Cout;
+output reg delpls;
+
 
 
 reg [5:0] current_state, next_state; 
     
     localparam  S_Reset         = 3'd0, 
 					 S_StartAnimation= 3'd1, 
-					 S_Right         = 3'd2,
-					 S_Left          = 3'd3,
-					 S_Center        = 3'd4,
-					 S_Done          = 3'd5, 
-					 S_Delete        = 3'd6;
+					 S_Center         = 3'd2,
+					 S_Delete          = 3'd3,
+					 S_Done          = 3'd4;
 					 
 					 
 	always@(*)
@@ -98,17 +98,11 @@ reg [5:0] current_state, next_state;
 					  
 				S_Reset: next_state =  PlotCtrl ? S_StartAnimation: S_Reset;
 				
-				S_StartAnimation: 
-											if(centerflag)
-											next_state = S_Center;
-											else
-											next_state = rightFlag ? S_Right : S_Left;
+				S_StartAnimation: next_state = deleteFlag ? S_Center : S_Delete;
 				
-				S_Right : next_state = DoneCtrl ? S_Done : S_Right;
+				S_Center : next_state = DoneCtrl ? S_Done : S_Center;
 				
-				S_Left : next_state = DoneCtrl ? S_Done : S_Left;
-				
-				S_Center: next_state = DoneCtrl ? S_Done : S_Center;
+				S_Delete : next_state = DoneCtrl ? S_Done : S_Delete;
 				
 				S_Done: next_state = S_Reset;
 				
@@ -128,36 +122,22 @@ reg [5:0] current_state, next_state;
   
  case (current_state)
            
-
-	S_Reset: begin
-	
-//	xout = 9'd0;
-//	yout = 8'd0;
-//	draw = 1'b0;
-		
-   end
-	
-	S_Right: begin
-	
-	xout = 9'd160;
-	yout = 8'd70;
-	//draw = 1'b1;
-	
-	end
-	
-	S_Left: begin
-	
-   xout = 9'd80;
-	yout = 8'd70;
-	//draw = 1'b1;
-	
-	end
 	
 	S_Center: begin
 	
-   xout = 9'd120;
+	xout = 9'd120;
 	yout = 8'd70;
-	//draw = 1'b1;
+	delpls = 1'b0;
+	//Cout = Cin;
+	
+	end
+	
+	S_Delete: begin
+	
+   xout = 9'd0;
+	yout = 8'd70;
+	delpls = 1'b1;
+	//Cout = 3'b000;
 	
 	end
 	
@@ -192,25 +172,46 @@ always@(posedge clk)
  //----------------------------------------------------------------------------------------------
  
  
- module datapath(clk,resetData, start,DoneData,Xin,Yin,Xout,Yout,counter);
+ module datapath(clk,resetData, start,DoneData,Xin,Yin,Xout,Yout,counter,delete);
  
- input clk,resetData,start;
+ input clk,resetData,start,delete;
  
  input [8:0] Xin;
  input [7:0] Yin;
  output reg [8:0] Xout;
  output reg [7:0] Yout;
  output reg DoneData;
-
  output reg [13:0]counter;
  wire [8:0] Xlimit;
  wire [7:0] Ylimit;
  
- //add 80
- assign Xlimit = Xin + 9'd80;
- //add 120
- assign Ylimit = Yin + 8'd120;
  
+ 
+ assign Xlimit = delete ? (Xin + 9'd320) : (Xin + 9'd80);
+ assign Ylimit = Yin + 8'd120;
+
+ //--------------------------------------------------------
+//	always@(posedge CLOCK_50)
+//	begin
+//		if((clear1 == 1'b1)|(reset == 1'b1))
+//			count1 <= 28'd0;
+//		else
+//			count1 <= count1 + 1'b1;
+//	end
+//
+//	assign clear1 = Enable;
+//	assign Enable = (count1 == maxCount) ? 1'b1 : 1'b0;
+//
+//	always@(posedge CLOCK_50)
+//	begin
+//		if(reset == 1'b1)
+//			count2 <= 4'b0000;
+//		else if(Enable == 1'b1)
+//			count2 <= count2 + 1'b1;
+//		else
+//			count2 <= count2;
+//	end
+//---------------------------------------------------------
  always@(posedge clk)
    begin
 	if(!resetData)
@@ -222,22 +223,47 @@ always@(posedge clk)
 		end
 	
 	if(start)
-	begin
-	if(Xout == Xlimit && Yout < Ylimit)
 		begin
-		Xout <= Xin;
-		Yout <= Yout + 1'b1;
-		DoneData <= 1'b0;
-		end
-	if(Yout == Ylimit)
-		begin
-		DoneData <= 1'b1;
-		end
-	if(Xout < Xlimit && Yout < Ylimit)
-		begin
-			counter <= counter + 1'b1;
-			Xout <= Xout + 1'b1;
+	  if(!delete)
+		  begin
+		if(Xout == Xlimit && Yout < Ylimit)
+			begin
+			Xout <= Xin;
+			Yout <= Yout + 1'b1;
 			DoneData <= 1'b0;
+			end
+		if(Yout == Ylimit)
+			begin
+			DoneData <= 1'b1;
+			end
+		if(Xout < Xlimit && Yout < Ylimit)
+			begin
+				counter <= counter + 1'b1;
+				Xout <= Xout + 1'b1;
+				DoneData <= 1'b0;
+			end
+		end
+	 else
+		begin
+		if(Xout == 9'd320 && Yout < 9'd190)
+			begin
+			Xout <= 9'd0;
+			Yout <= Yout + 1'b1;
+			DoneData <= 1'b0;
+			counter <= 1'b0;
+			end
+		if(Yout == 9'd190)
+			begin
+			counter <= 1'b0;
+			DoneData <= 1'b1;
+			end
+		if(Xout < 9'd320 && Yout < 9'd190)
+			begin
+				counter <= 1'b0;
+				Xout <= Xout + 1'b1;
+				DoneData <= 1'b0;
+			end
+		
 		end
 	end
 	end
