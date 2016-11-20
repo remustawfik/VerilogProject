@@ -1,9 +1,10 @@
 
 
-module OnePunchMan(CLOCK_50, KEY,LEDR,HEX0,HEX1,VGA_CLK,VGA_HS,VGA_VS,VGA_BLANK_N,VGA_SYNC_N,VGA_R,VGA_G,VGA_B);
+module OnePunchMan(CLOCK_50, KEY,LEDR,SW,HEX0,HEX1,VGA_CLK,VGA_HS,VGA_VS,VGA_BLANK_N,VGA_SYNC_N,VGA_R,VGA_G,VGA_B);
 
 input CLOCK_50;
 input [3:0] KEY;
+input [6:0] SW;
 
 output			VGA_CLK;   				//	VGA Clock
 output			VGA_HS;					//	VGA H_SYNC
@@ -19,11 +20,22 @@ output [6:0] HEX1;
 
 wire [8:0] xVGA;
 wire [7:0] yVGA;
-reg [2:0] colourVGA;
-wire [13:0] address;
+wire [2:0] colourVGA;
+wire [15:0] address;
 wire [2:0] addressColourCenter;
 wire [2:0] addressColourRight;
 wire [2:0] addressColourLeft;
+
+
+reg [8:0] xBG;
+reg [7:0] yBG;
+wire [2:0] colourBG;
+reg [15:0] BGcounter;
+
+
+wire [8:0] xData;
+wire [7:0] yData;
+reg [2:0] colourData;
 
 
 //variables to count to 60 
@@ -49,18 +61,19 @@ wire SwaitC,SwaitR,SwaitL,SDrawC,SDrawR,SDrawL,Sreset,Cycle;
 assign reset = KEY[0];
 assign start = ~KEY[1];
 
-centerpose cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
+BoxerCenter cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
 BoxerRight kitty(address,CLOCK_50,3'b000,1'b0,addressColourRight);
 BoxerLeft  kittycat(address,CLOCK_50,3'b000,1'b0,addressColourLeft);
+Banner     PUPPERssss(BGcounter,CLOCK_50,3'b000,1'b0,colourBG);
 
 //assign colourVGA = DCenter ? addressColourCenter: addressColourRight;
 always@(*)
 begin
 	case(SelectImage)
 	
-	2'b01: colourVGA = addressColourCenter;
-	2'b10: colourVGA = addressColourRight;
-	2'b11: colourVGA = addressColourLeft;
+	2'b01: colourData = addressColourCenter;
+	2'b10: colourData = addressColourRight;
+	2'b11: colourData = addressColourLeft;
 	
 	endcase
 
@@ -69,6 +82,44 @@ end
 
 assign plot = 1'b1;
 
+//---------------------------------------------------------------------
+
+always@(posedge CLOCK_50)
+   begin
+					
+				if(reset)
+					begin
+						xBG <= 9'd0;
+						yBG <= 8'd0;
+						BGcounter <= 17'd0;
+					end
+				
+	         //Draw Center
+				if(~SW[0])
+					begin
+						if(xBG == 9'd320 && yBG < 8'd240)
+							begin
+							xBG <= 9'd0;
+							yBG <= yBG + 1'b1;
+							end
+						if(yBG == 8'd240)
+							begin
+	                   
+							end
+						if(xBG < 9'd320 && yBG < 8'd240)
+							begin
+								BGcounter <= BGcounter + 1'b1;
+								xBG <= xBG + 1'b1;
+							end
+					end		
+	end
+
+	assign xVGA = (~SW[0]) ? xBG : xData;
+	assign yVGA = (~SW[0]) ? yBG : yData;
+	assign colourVGA = (~SW[0]) ? colourBG : colourData;
+	
+
+//----------------------------------------------------------------------
 // counts to 60 seconds
 	always@(posedge CLOCK_50)
 	begin
@@ -125,10 +176,10 @@ vga_adapter VGA(
 		defparam VGA.RESOLUTION = "320x240";
 		defparam VGA.MONOCHROME = "FALSE";
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
-		defparam VGA.BACKGROUND_IMAGE = "bannertoo.mif";
+		defparam VGA.BACKGROUND_IMAGE = "ending.mif";
 		
 control pupperz(CLOCK_50,reset,DdrawC,DdrawR,DdrawL,DwaitR,DwaitC,DwaitL,start,Sreset,SDrawC,SDrawR,SDrawL,SwaitC,SwaitR,SwaitL,Cycle,SelectImage);
-datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xVGA,yVGA,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SdrawL,Cycle);
+datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xData,yData,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SdrawL,Cycle);
 
 hex_decoder BOI(HexWrite1, HEX0);
 hex_decoder BOII(HexWrite2, HEX1);
@@ -154,10 +205,15 @@ reg [5:0] current_state, next_state;
 					 S_Right          = 5'd5,
 					 S_ResetR         = 5'd6,
 					 S_Wait_Right     = 5'd7,
-					 S_Left           = 5'd8,
-					 S_ResetL         = 5'd9,
-					 S_Wait_Left      = 5'd10,
-					 S_Done           = 5'd11;
+					 //---------------------
+					 S_Centertoo         = 5'd8,
+					 S_ResetCtoo         = 5'd9,
+					 S_Wait_Ctoo    		= 5'd10,
+					 //---------------------
+					 S_Left           = 5'd11,
+					 S_ResetL         = 5'd12,
+					 S_Wait_Left      = 5'd13,
+					 S_Done           = 5'd14;
 					 
 					 
 	always@(*)
@@ -183,7 +239,16 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetR: next_state =  S_Wait_Right;
 				
-				S_Wait_Right: next_state = DoneWaitR ? S_Left : S_Wait_Right;
+				S_Wait_Right: next_state = DoneWaitR ? S_Centertoo : S_Wait_Right;
+				
+				//-------------------------------------------
+				S_Centertoo : next_state = DoneDrawC ? S_ResetCtoo : S_Centertoo;
+				
+				S_ResetCtoo: next_state =  S_Wait_Ctoo;
+				
+				S_Wait_Ctoo: next_state = DoneWaitC ? S_Left : S_Wait_Ctoo;
+				
+				//---------------------------------------------------------
 				
 				S_Left : next_state = DoneDrawL ? S_ResetL : S_Left;
 				
@@ -304,6 +369,51 @@ reg [5:0] current_state, next_state;
 	cycle = 1'b0;
 	
 	end
+	//---------------------------------
+	
+	S_Centertoo: begin
+
+	startReset = 1'b0;
+	startDrawR = 1'b0;
+	startDrawC = 1'b1;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b0;
+	SelectImag = 2'b01;
+	cycle = 1'b0;
+	
+	end
+	
+	S_ResetCtoo: begin
+	
+	startReset = 1'b1;
+	startDrawR = 1'b0;
+	startDrawC = 1'b0;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b0;
+	SelectImag = 2'b10;
+	cycle = 1'b0;
+	
+	end
+	
+	S_Wait_Ctoo: begin
+	
+	startReset = 1'b0;
+	startDrawR = 1'b0;
+	startDrawC = 1'b0;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b1;
+	SelectImag = 2'b10;
+	cycle = 1'b0;
+	
+	end
+	
+	//---------------------------------
 	
 	S_Left: begin
 
@@ -392,7 +502,7 @@ always@(posedge clk)
  output reg DoneWaitingR,DoneWaitingC,DoneWaitingL;
  
  //accessing memory block and VGA
- output reg [13:0] Drawcount;
+ output reg [15:0] Drawcount;
  output reg [8:0] Xout;
  output reg [7:0] Yout;
  
@@ -467,32 +577,32 @@ always@(posedge clk)
    begin
 				if(resetData)
 					begin
-						Xout <= 9'd90;
-						Yout <= 8'd70;
+						Xout <= 9'd0;
+						Yout <= 8'd75;
 						DoneDrawingR <= 1'b0;
 						DoneDrawingC <= 1'b0;
 						DoneDrawingL <= 1'b0;
-						Drawcount <= 14'd0;
+						Drawcount <= 16'd0;
 					end
 				
 	         //Draw Center
 				if(startDrawC | startDrawR | cyc | startDrawL)
 					begin
-						if(Xout == 9'd220 && Yout < 8'd190)
+						if(Xout == 9'd320 && Yout < 8'd240)
 							begin
-							Xout <= 9'd90;
+							Xout <= 9'd0;
 							Yout <= Yout + 1'b1;
 							DoneDrawingC <= 1'b0;
 							DoneDrawingR <= 1'b0;
 							DoneDrawingL <= 1'b0;
 							end
-						if(Yout == 8'd190)
+						if(Yout == 8'd240)
 							begin
 							DoneDrawingC <= 1'b1;
 							DoneDrawingR <= 1'b1;
 							DoneDrawingL <= 1'b1;
 							end
-						if(Xout < 9'd220 && Yout < 8'd190)
+						if(Xout < 9'd320 && Yout < 8'd240)
 							begin
 								Drawcount <= Drawcount + 1'b1;
 								Xout <= Xout + 1'b1;
