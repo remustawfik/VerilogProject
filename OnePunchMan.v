@@ -19,7 +19,7 @@ output [6:0] HEX1;
 
 wire [8:0] xVGA;
 wire [7:0] yVGA;
-wire [2:0] colourVGA;
+reg [2:0] colourVGA;
 wire [13:0] address;
 wire [2:0] addressColourCenter;
 wire [2:0] addressColourRight;
@@ -39,7 +39,8 @@ reg [3:0]HexWrite2;
 wire plot,reset,start;
 
 //datapath output flags
-wire DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,DCenter,DRight;
+wire DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL;
+wire [1:0] SelectImage;
 
 //control output flags
 wire SwaitC,SwaitR,SwaitL,SDrawC,SDrawR,SDrawL,Sreset,Cycle;
@@ -52,17 +53,18 @@ centerpose cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
 BoxerRight kitty(address,CLOCK_50,3'b000,1'b0,addressColourRight);
 BoxerLeft  kittycat(address,CLOCK_50,3'b000,1'b0,addressColourLeft);
 
-assign colourVGA = DCenter ? addressColourCenter: addressColourRight;
-//always@(CLOCK_50)
-//begin
-//	if(DCenter == 1'b1)
-//	colourVGA <= addressColourCenter;
-//	else if(DRight == 1'b1)
-//	colourVGA <= addressColourRight; 
-//	else
-//	colourVGA <= addressColourLeft;
-//
-//end
+//assign colourVGA = DCenter ? addressColourCenter: addressColourRight;
+always@(*)
+begin
+	case(SelectImage)
+	
+	2'b01: colourVGA = addressColourCenter;
+	2'b10: colourVGA = addressColourRight;
+	2'b11: colourVGA = addressColourLeft;
+	
+	endcase
+
+end
 
 
 assign plot = 1'b1;
@@ -125,7 +127,7 @@ vga_adapter VGA(
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
 		defparam VGA.BACKGROUND_IMAGE = "bannertoo.mif";
 		
-control pupperz(CLOCK_50,reset,DdrawC,DdrawR,DdrawL,DwaitR,DwaitC,DwaitL,start,Sreset,SDrawC,SDrawR,SDrawL,SwaitC,SwaitR,SwaitL,Cycle,DCenter,DRight);
+control pupperz(CLOCK_50,reset,DdrawC,DdrawR,DdrawL,DwaitR,DwaitC,DwaitL,start,Sreset,SDrawC,SDrawR,SDrawL,SwaitC,SwaitR,SwaitL,Cycle,SelectImage);
 datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xVGA,yVGA,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SdrawL,Cycle);
 
 hex_decoder BOI(HexWrite1, HEX0);
@@ -134,10 +136,11 @@ hex_decoder BOII(HexWrite2, HEX1);
 endmodule 
 
 //-------------------------------------------------------------------------------------
-module control(clk,reset,DoneDrawC,DoneDrawR,DoneDrawL,DoneWaitR,DoneWaitC,DoneWaitL,PlotCtrl,startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle,DrawCenter,DrawRight);
+module control(clk,reset,DoneDrawC,DoneDrawR,DoneDrawL,DoneWaitR,DoneWaitC,DoneWaitL,PlotCtrl,startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle,SelectImag);
 
 input clk,DoneDrawC,DoneDrawR,DoneDrawL,PlotCtrl,DoneWaitR,DoneWaitC,DoneWaitL,reset;
-output reg startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle,DrawCenter,DrawRight;
+output reg startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle;
+output reg [1:0] SelectImag;
 
 
 
@@ -151,10 +154,10 @@ reg [5:0] current_state, next_state;
 					 S_Right          = 5'd5,
 					 S_ResetR         = 5'd6,
 					 S_Wait_Right     = 5'd7,
-//					 S_Left           = 5'd8,
-//					 S_ResetL         = 5'd9,
-//					 S_Wait_Left      = 5'd10,
-					 S_Done           = 5'd8;
+					 S_Left           = 5'd8,
+					 S_ResetL         = 5'd9,
+					 S_Wait_Left      = 5'd10,
+					 S_Done           = 5'd11;
 					 
 					 
 	always@(*)
@@ -180,13 +183,13 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetR: next_state =  S_Wait_Right;
 				
-				S_Wait_Right: next_state = DoneWaitR ? S_Done : S_Wait_Right;
-//				
-//				S_Left : next_state = DoneDrawL ? S_ResetL : S_Left;
-//				
-//				S_ResetL: next_state =  S_Wait_Left;
-//				
-//				S_Wait_Left: next_state = DoneWaitL ? S_Done : S_Wait_Left;
+				S_Wait_Right: next_state = DoneWaitR ? S_Left : S_Wait_Right;
+				
+				S_Left : next_state = DoneDrawL ? S_ResetL : S_Left;
+				
+				S_ResetL: next_state =  S_Wait_Left;
+				
+				S_Wait_Left: next_state = DoneWaitL ? S_Done : S_Wait_Left;
 				
 				S_Done: next_state= S_StartAnimation;
 				
@@ -210,12 +213,12 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b0;
 	startDrawC = 1'b0;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b1;
-	DrawRight  = 1'b0;
 	startWaitR = 1'b0;
 	startWaitL = 1'b0;
 	startWaitC = 1'b0;
+	SelectImag = 2'b01;
 	cycle = 1'b0;
+	
 	end
 	
 	S_Center: begin
@@ -224,11 +227,10 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b0;
 	startDrawC = 1'b1;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b1;
-	DrawRight  = 1'b0;
 	startWaitR = 1'b0;
 	startWaitL = 1'b0;
 	startWaitC = 1'b0;
+	SelectImag = 2'b01;
 	cycle = 1'b0;
 	
 	end
@@ -239,11 +241,10 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b0;
 	startDrawC = 1'b0;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b0;
-	DrawRight  = 1'b1;
 	startWaitR = 1'b0;
 	startWaitL = 1'b0;
 	startWaitC = 1'b0;
+	SelectImag = 2'b10;
 	cycle = 1'b0;
 	
 	end
@@ -254,11 +255,10 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b0;
 	startDrawC = 1'b0;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b0;
-	DrawRight  = 1'b1;
 	startWaitR = 1'b0;
 	startWaitL = 1'b0;
 	startWaitC = 1'b1;
+	SelectImag = 2'b10;
 	cycle = 1'b0;
 	
 	end
@@ -270,11 +270,10 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b1;
 	startDrawC = 1'b0;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b0;
-	DrawRight  = 1'b1;
 	startWaitR = 1'b0;
 	startWaitL = 1'b0;
 	startWaitC = 1'b0;
+	SelectImag = 2'b10;
 	cycle = 1'b0;
 	end
 	
@@ -284,11 +283,10 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b0;
 	startDrawC = 1'b0;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b0;
-	DrawRight  = 1'b0;
 	startWaitR = 1'b0;
 	startWaitL = 1'b0;
 	startWaitC = 1'b0;
+	SelectImag = 2'b11;
 	cycle = 1'b0;
 	
 	end
@@ -299,58 +297,55 @@ reg [5:0] current_state, next_state;
 	startDrawR = 1'b0;
 	startDrawC = 1'b0;
 	startDrawL = 1'b0;
-	DrawCenter = 1'b0;
-	DrawRight  = 1'b0;
 	startWaitR = 1'b1;
 	startWaitL = 1'b0;
 	startWaitC = 1'b0;
+	SelectImag = 2'b11;
 	cycle = 1'b0;
 	
 	end
 	
-//	S_Left: begin
-//
-//	startReset = 1'b0;
-//	startDrawR = 1'b0;
-//	startDrawC = 1'b0;
-//	startDrawL = 1'b1;
-//	DrawCenter = 1'b0;
-//	DrawRight  = 1'b0;
-//	startWaitR = 1'b0;
-//	startWaitL = 1'b0;
-//	startWaitC = 1'b0;
-//	cycle = 1'b0;
-//	end
-//	
-//   S_ResetL: begin
-//	
-//	startReset = 1'b1;
-//	startDrawR = 1'b0;
-//	startDrawC = 1'b0;
-//	startDrawL = 1'b0;
-//	DrawCenter = 1'b1;
-//	DrawRight  = 1'b0;
-//	startWaitR = 1'b0;
-//	startWaitL = 1'b0;
-//	startWaitC = 1'b0;
-//	cycle = 1'b0;
-//	
-//	end
-//	
-//	S_Wait_Left: begin
-//	
-//	startReset = 1'b1;
-//	startDrawL = 1'b0;
-//	startDrawR = 1'b0;
-//	startDrawC = 1'b0;
-//	DrawCenter = 1'b1;
-//	DrawRight  = 1'b0;
-//	startWaitR = 1'b0;
-//	startWaitC = 1'b0;
-//	startWaitL = 1'b1;
-//	cycle = 1'b0;
-//	
-//	end
+	S_Left: begin
+
+	startReset = 1'b0;
+	startDrawR = 1'b0;
+	startDrawC = 1'b1;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b0;
+	SelectImag = 2'b11;
+	cycle = 1'b0;
+	
+	end
+	
+	S_ResetL: begin
+	
+	startReset = 1'b1;
+	startDrawR = 1'b0;
+	startDrawC = 1'b0;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b0;
+	SelectImag = 2'b11;
+	cycle = 1'b0;
+	
+	end
+	
+	S_Wait_Left: begin
+	
+	startReset = 1'b0;
+	startDrawR = 1'b0;
+	startDrawC = 1'b0;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b1;
+	SelectImag = 2'b11;
+	cycle = 1'b0;
+	
+	end
 	
 	S_Done: begin
 	
@@ -358,11 +353,10 @@ reg [5:0] current_state, next_state;
 	startDrawL = 1'b0;
 	startDrawR = 1'b0;
 	startDrawC = 1'b0;
-	DrawCenter = 1'b1;
-	DrawRight  = 1'b0;
 	startWaitR = 1'b0;
 	startWaitC = 1'b0;
 	startWaitL = 1'b0;
+	SelectImag = 2'b01;
 	cycle = 1'b1;
 	
 	end
@@ -395,7 +389,7 @@ always@(posedge clk)
  
  //output flags
  output reg DoneDrawingR,DoneDrawingC,DoneDrawingL;
- output DoneWaitingR,DoneWaitingC,DoneWaitingL;
+ output reg DoneWaitingR,DoneWaitingC,DoneWaitingL;
  
  //accessing memory block and VGA
  output reg [13:0] Drawcount;
@@ -416,27 +410,41 @@ always@(posedge clk)
 	always@(posedge clk)
 	begin
 	if(clear1 | resetData)
-			timer1 <= 28'd0;	
-	if(startWaitC)
+			begin
+			timer1 <= 28'd0;
+			DoneWaitingC <= 1'b0;
+		   DoneWaitingR <= 1'b0;
+		   DoneWaitingL <= 1'b0;
+			end
+	if(startWaitC | startWaitR | startWaitL)
 			timer1 <= timer1 + 1'b1;
+	if(timer1 == 28'd100000000)
+			begin
+	      DoneWaitingC <= 1'b1;
+			DoneWaitingR <= 1'b1;
+			DoneWaitingL <= 1'b1;
+			end
 	end
 
 	assign clear1 = DoneWaitingC;
-	assign DoneWaitingC = (timer1 == 28'd100000000) ? 1'b1 : 1'b0;
-	
- //counts to 4 seconds Right
- 
-	always@(posedge clk)
-	begin
-	if(clear2 | resetData)
-			timer2 <= 28'd0;	
-	if(startWaitR)
-			timer2 <= timer2 + 1'b1;
-	end
-
-	assign clear2 = DoneWaitingR;
-	assign DoneWaitingR = (timer2 == 28'd100000000) ? 1'b1 : 1'b0;
-
+//	//assign DoneWaitingC = (timer1 == 28'd100000000) ? 1'b1 : 1'b0;
+//	
+// //counts to 4 seconds Right
+// 
+//	always@(posedge clk)
+//	begin
+//	if(clear2 | resetData)
+//			timer2 <= 28'd0;
+//			DoneWaitingR <= 1'b0;	
+//	if(startWaitR)
+//			timer2 <= timer2 + 1'b1;
+//	if(timer1 == 28'd100000000)
+//	      DoneWaitingR <= 1'b1;
+//	end
+//
+//	assign clear2 = DoneWaitingR;
+//	//assign DoneWaitingR = (timer2 == 28'd100000000) ? 1'b1 : 1'b0;
+//
 //
 // //counts to 4 seconds Left
 // 
@@ -444,12 +452,15 @@ always@(posedge clk)
 //	begin
 //	if(clear3 | resetData)
 //			timer3 <= 28'd0;	
+//			DoneWaitingL <= 1'b0;
 //	if(startWaitL)
 //			timer3 <= timer3 + 1'b1;
+//	if(timer1 == 28'd100000000)
+//	      DoneWaitingL <= 1'b1;
 //	end
 //
 //	assign clear3 = DoneWaitingL;
-//	assign DoneWaitingL = (timer3 == 28'd100000000) ? 1'b1 : 1'b0;
+//	//assign DoneWaitingL = (timer3 == 28'd100000000) ? 1'b1 : 1'b0;
 
 //---------------------------------------------------------
  always@(posedge clk)
@@ -465,7 +476,7 @@ always@(posedge clk)
 					end
 				
 	         //Draw Center
-				if(startDrawC | startDrawR | cyc)
+				if(startDrawC | startDrawR | cyc | startDrawL)
 					begin
 						if(Xout == 9'd220 && Yout < 8'd190)
 							begin
@@ -473,11 +484,13 @@ always@(posedge clk)
 							Yout <= Yout + 1'b1;
 							DoneDrawingC <= 1'b0;
 							DoneDrawingR <= 1'b0;
+							DoneDrawingL <= 1'b0;
 							end
 						if(Yout == 8'd190)
 							begin
 							DoneDrawingC <= 1'b1;
 							DoneDrawingR <= 1'b1;
+							DoneDrawingL <= 1'b1;
 							end
 						if(Xout < 9'd220 && Yout < 8'd190)
 							begin
@@ -485,29 +498,10 @@ always@(posedge clk)
 								Xout <= Xout + 1'b1;
 							   DoneDrawingC <= 1'b0;
 								DoneDrawingR <= 1'b0;
+								DoneDrawingL <= 1'b0;
 							end
 					end
 					
-//					//Draw Left
-//					if(startDrawL)
-//					begin
-//						if(Xout == 9'd220 && Yout < 8'd190)
-//							begin
-//							Xout <= 9'd90;
-//							Yout <= Yout + 1'b1;
-//							DoneDrawingL <= 1'b0;
-//							end
-//						if(Yout == 8'd190)
-//							begin
-//							DoneDrawingL <= 1'b1;
-//							end
-//						if(Xout < 9'd220 && Yout < 8'd190)
-//							begin
-//								Drawcount <= Drawcount + 1'b1;
-//								Xout <= Xout + 1'b1;
-//								DoneDrawingL <= 1'b0;
-//							end
-//					end
 	end
 	
 	
