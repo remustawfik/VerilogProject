@@ -1,5 +1,4 @@
 
-
 module OnePunchMan(CLOCK_50, KEY,LEDR,SW,HEX0,HEX1,VGA_CLK,VGA_HS,VGA_VS,VGA_BLANK_N,VGA_SYNC_N,VGA_R,VGA_G,VGA_B);
 
 input CLOCK_50;
@@ -63,48 +62,19 @@ wire SwaitC,SwaitR,SwaitL,SDrawC,SDrawR,SDrawL,Sreset,SResEnd,Cycle;
 assign reset = KEY[0];
 assign start = ~KEY[1];
 
-BoxerCenter cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
+BoxerCentre cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
 BoxerRight kitty(address,CLOCK_50,3'b000,1'b0,addressColourRight);
 BoxerLeft  kittycat(address,CLOCK_50,3'b000,1'b0,addressColourLeft);
-NewBanner  PUPPERssss(BGcounter,CLOCK_50,3'b000,1'b0,colourBG);
+SS  PUPPERssss(BGcounter,CLOCK_50,3'b000,1'b0,colourBG);
 Ending     dogger(address,CLOCK_50,3'b000,1'b0,addressEnding);
 
 
 //---------------------------------------------------------------------
 
-always@(posedge CLOCK_50)
-   begin
-					
-				if(!reset)
-					begin
-						xBG <= 9'd0;
-						yBG <= 8'd0;
-						BGcounter <= 16'd0;
-					end
-				
-	         //Draw Center
-				if(start)
-					begin
-						if(xBG == 9'd320 && yBG < 8'd80)
-							begin
-							xBG <= 9'd0;
-							yBG <= yBG + 1'b1;
-							end
-						if(yBG == 8'd80)
-							begin
-	                   
-							end
-						if(xBG < 9'd320 && yBG < 8'd80)
-							begin
-								BGcounter <= BGcounter + 1'b1;
-								xBG <= xBG + 1'b1;
-							end
-					end		
-	end
 
-	assign xVGA = (~SW[0]) ? xBG : xData;
-	assign yVGA = (~SW[0]) ? yBG : yData;
-	assign colourVGA = (~SW[0]) ? colourBG : colourData;
+	assign xVGA = xData;
+	assign yVGA = yData;
+	assign colourVGA = colourData;
 	
 
 //----------------------------------------------------------------------
@@ -185,10 +155,10 @@ vga_adapter VGA(
 		defparam VGA.RESOLUTION = "320x240";
 		defparam VGA.MONOCHROME = "FALSE";
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
-		defparam VGA.BACKGROUND_IMAGE = "startscreen.mif";
+		defparam VGA.BACKGROUND_IMAGE = "bannerfinaltoo.mif";
 		
 control pupperz(CLOCK_50,reset,DdrawC,DdrawR,DdrawL,DwaitR,DwaitC,DwaitL,start,Sreset,SDrawC,SDrawR,SDrawL,SwaitC,SwaitR,SwaitL,Cycle,SelectImage,endSignal,SResEnd);
-datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xData,yData,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SdrawL,Cycle,endSignal,SResEnd);
+datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xData,yData,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SDrawL,Cycle,endSignal,SResEnd);
 
 hex_decoder BOI(HexWrite1, HEX0);
 hex_decoder BOII(HexWrite2, HEX1);
@@ -206,7 +176,7 @@ output reg [1:0] SelectImag;
 
 reg [5:0] current_state, next_state; 
     
-    localparam  S_Reset          = 5'd0, 
+    localparam  S_Reset          = 5'd0,
 					 S_StartAnimation = 5'd1, 
 					 S_Center         = 5'd2,
 					 S_ResetC         = 5'd3,
@@ -237,6 +207,7 @@ reg [5:0] current_state, next_state;
 					       next_state = S_StartAnimation;
 							 else
 							 next_state = S_Reset;
+							 
 				
 				S_StartAnimation: next_state = endS ? S_ResetEnd : S_Center;
 				
@@ -301,6 +272,7 @@ reg [5:0] current_state, next_state;
 	startResEnd = 1'b0;
 	
 	end
+	
 	
 	S_Center: begin
 
