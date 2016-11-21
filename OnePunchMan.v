@@ -25,6 +25,8 @@ wire [15:0] address;
 wire [2:0] addressColourCenter;
 wire [2:0] addressColourRight;
 wire [2:0] addressColourLeft;
+wire [2:0] addressEnding;
+reg endSignal;
 
 
 reg [8:0] xBG;
@@ -55,7 +57,7 @@ wire DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL;
 wire [1:0] SelectImage;
 
 //control output flags
-wire SwaitC,SwaitR,SwaitL,SDrawC,SDrawR,SDrawL,Sreset,Cycle;
+wire SwaitC,SwaitR,SwaitL,SDrawC,SDrawR,SDrawL,Sreset,SResEnd,Cycle;
 
 
 assign reset = KEY[0];
@@ -64,49 +66,35 @@ assign start = ~KEY[1];
 BoxerCenter cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
 BoxerRight kitty(address,CLOCK_50,3'b000,1'b0,addressColourRight);
 BoxerLeft  kittycat(address,CLOCK_50,3'b000,1'b0,addressColourLeft);
-Banner     PUPPERssss(BGcounter,CLOCK_50,3'b000,1'b0,colourBG);
+NewBanner  PUPPERssss(BGcounter,CLOCK_50,3'b000,1'b0,colourBG);
+Ending     dogger(address,CLOCK_50,3'b000,1'b0,addressEnding);
 
-//assign colourVGA = DCenter ? addressColourCenter: addressColourRight;
-always@(*)
-begin
-	case(SelectImage)
-	
-	2'b01: colourData = addressColourCenter;
-	2'b10: colourData = addressColourRight;
-	2'b11: colourData = addressColourLeft;
-	
-	endcase
-
-end
-
-
-assign plot = 1'b1;
 
 //---------------------------------------------------------------------
 
 always@(posedge CLOCK_50)
    begin
 					
-				if(reset)
+				if(!reset)
 					begin
 						xBG <= 9'd0;
 						yBG <= 8'd0;
-						BGcounter <= 17'd0;
+						BGcounter <= 16'd0;
 					end
 				
 	         //Draw Center
-				if(~SW[0])
+				if(start)
 					begin
-						if(xBG == 9'd320 && yBG < 8'd240)
+						if(xBG == 9'd320 && yBG < 8'd80)
 							begin
 							xBG <= 9'd0;
 							yBG <= yBG + 1'b1;
 							end
-						if(yBG == 8'd240)
+						if(yBG == 8'd80)
 							begin
 	                   
 							end
-						if(xBG < 9'd320 && yBG < 8'd240)
+						if(xBG < 9'd320 && yBG < 8'd80)
 							begin
 								BGcounter <= BGcounter + 1'b1;
 								xBG <= xBG + 1'b1;
@@ -120,6 +108,22 @@ always@(posedge CLOCK_50)
 	
 
 //----------------------------------------------------------------------
+always@(*)
+begin
+	case(SelectImage)
+	
+	2'b00: colourData = addressEnding;
+	2'b01: colourData = addressColourCenter;
+	2'b10: colourData = addressColourRight;
+	2'b11: colourData = addressColourLeft;
+	
+	endcase
+
+end
+
+
+assign plot = 1'b1;
+
 // counts to 60 seconds
 	always@(posedge CLOCK_50)
 	begin
@@ -149,9 +153,14 @@ always@(posedge CLOCK_50)
 	always@(posedge CLOCK_50)
 	begin
 		if(!reset)
+		begin
 			HexWrite2 <= 4'b0000;
+			endSignal <= 1'b0;
+		end
 		else if(HexEnabler2 == 1'b1)
 			HexWrite2 <= HexWrite2 + 1'b1;
+	   else if(HexWrite2 == 4'b0011)
+		   endSignal <= 1'b1;
 		else
 			HexWrite2 <= HexWrite2;
 	end
@@ -176,10 +185,10 @@ vga_adapter VGA(
 		defparam VGA.RESOLUTION = "320x240";
 		defparam VGA.MONOCHROME = "FALSE";
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
-		defparam VGA.BACKGROUND_IMAGE = "ending.mif";
+		defparam VGA.BACKGROUND_IMAGE = "startscreen.mif";
 		
-control pupperz(CLOCK_50,reset,DdrawC,DdrawR,DdrawL,DwaitR,DwaitC,DwaitL,start,Sreset,SDrawC,SDrawR,SDrawL,SwaitC,SwaitR,SwaitL,Cycle,SelectImage);
-datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xData,yData,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SdrawL,Cycle);
+control pupperz(CLOCK_50,reset,DdrawC,DdrawR,DdrawL,DwaitR,DwaitC,DwaitL,start,Sreset,SDrawC,SDrawR,SDrawL,SwaitC,SwaitR,SwaitL,Cycle,SelectImage,endSignal,SResEnd);
+datapath PUPPER(CLOCK_50,Sreset,DdrawR,DdrawC,DdrawL,DwaitR,DwaitC,DwaitL,xData,yData,address,SwaitR,SwaitC,SwaitL,SDrawC,SDrawR,SdrawL,Cycle,endSignal,SResEnd);
 
 hex_decoder BOI(HexWrite1, HEX0);
 hex_decoder BOII(HexWrite2, HEX1);
@@ -187,10 +196,10 @@ hex_decoder BOII(HexWrite2, HEX1);
 endmodule 
 
 //-------------------------------------------------------------------------------------
-module control(clk,reset,DoneDrawC,DoneDrawR,DoneDrawL,DoneWaitR,DoneWaitC,DoneWaitL,PlotCtrl,startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle,SelectImag);
+module control(clk,reset,DoneDrawC,DoneDrawR,DoneDrawL,DoneWaitR,DoneWaitC,DoneWaitL,PlotCtrl,startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle,SelectImag,endS,startResEnd);
 
-input clk,DoneDrawC,DoneDrawR,DoneDrawL,PlotCtrl,DoneWaitR,DoneWaitC,DoneWaitL,reset;
-output reg startReset,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle;
+input clk,DoneDrawC,DoneDrawR,DoneDrawL,PlotCtrl,DoneWaitR,DoneWaitC,DoneWaitL,reset,endS;
+output reg startReset,startResEnd,startDrawC,startDrawR,startDrawL,startWaitC,startWaitR,startWaitL,cycle;
 output reg [1:0] SelectImag;
 
 
@@ -206,14 +215,16 @@ reg [5:0] current_state, next_state;
 					 S_ResetR         = 5'd6,
 					 S_Wait_Right     = 5'd7,
 					 //---------------------
-					 S_Centertoo         = 5'd8,
-					 S_ResetCtoo         = 5'd9,
-					 S_Wait_Ctoo    		= 5'd10,
+					 S_Centertoo      = 5'd8,
+					 S_ResetCtoo      = 5'd9,
+					 S_Wait_Ctoo      = 5'd10,
 					 //---------------------
 					 S_Left           = 5'd11,
 					 S_ResetL         = 5'd12,
 					 S_Wait_Left      = 5'd13,
-					 S_Done           = 5'd14;
+					 S_ResetEnd       = 5'd14,
+					 S_EndScreen      = 5'd15,
+					 S_Done           = 5'd16;
 					 
 					 
 	always@(*)
@@ -227,7 +238,7 @@ reg [5:0] current_state, next_state;
 							 else
 							 next_state = S_Reset;
 				
-				S_StartAnimation: next_state = S_Center;
+				S_StartAnimation: next_state = endS ? S_ResetEnd : S_Center;
 				
 				S_Center : next_state = DoneDrawC ? S_ResetC : S_Center;
 				
@@ -256,6 +267,10 @@ reg [5:0] current_state, next_state;
 				
 				S_Wait_Left: next_state = DoneWaitL ? S_Done : S_Wait_Left;
 				
+				S_ResetEnd: next_state = S_EndScreen;
+				
+				S_EndScreen: next_state = S_EndScreen;
+				
 				S_Done: next_state= S_StartAnimation;
 				
 				default:
@@ -283,6 +298,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b01;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -297,6 +313,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b01;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -311,6 +328,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b10;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -325,6 +343,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b1;
 	SelectImag = 2'b10;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -340,6 +359,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b10;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	end
 	
    S_ResetR: begin
@@ -353,6 +373,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b11;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -367,6 +388,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b11;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	//---------------------------------
@@ -382,6 +404,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b01;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -396,6 +419,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b10;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -410,6 +434,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b1;
 	SelectImag = 2'b10;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -426,6 +451,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b11;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -440,6 +466,7 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b0;
 	SelectImag = 2'b11;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -454,7 +481,37 @@ reg [5:0] current_state, next_state;
 	startWaitC = 1'b1;
 	SelectImag = 2'b11;
 	cycle = 1'b0;
+	startResEnd = 1'b0;
 	
+	end
+	
+	S_ResetEnd: begin
+	
+	startReset = 1'b0;
+	startDrawR = 1'b0;
+	startDrawC = 1'b0;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b0;
+	SelectImag = 2'b00;
+	cycle = 1'b0;
+	startResEnd = 1'b1;
+	end
+	
+	S_EndScreen: begin
+	
+	startReset = 1'b0;
+	startDrawR = 1'b0;
+	startDrawC = 1'b0;
+	startDrawL = 1'b0;
+	startWaitR = 1'b0;
+	startWaitL = 1'b0;
+	startWaitC = 1'b0;
+	SelectImag = 2'b00;
+	cycle = 1'b0;
+	startResEnd = 1'b0;
+
 	end
 	
 	S_Done: begin
@@ -468,6 +525,7 @@ reg [5:0] current_state, next_state;
 	startWaitL = 1'b0;
 	SelectImag = 2'b01;
 	cycle = 1'b1;
+	startResEnd = 1'b0;
 	
 	end
 	
@@ -493,9 +551,9 @@ always@(posedge clk)
  //----------------------------------------------------------------------------------------------
  
  
- module datapath(clk,resetData,DoneDrawingR,DoneDrawingC,DoneDrawingL,DoneWaitingR,DoneWaitingC,DoneWaitingL,Xout,Yout,Drawcount,startWaitR,startWaitC,startWaitL,startDrawR,startDrawC,startDrawL,cyc);
+ module datapath(clk,resetData,DoneDrawingR,DoneDrawingC,DoneDrawingL,DoneWaitingR,DoneWaitingC,DoneWaitingL,Xout,Yout,Drawcount,startWaitR,startWaitC,startWaitL,startDrawR,startDrawC,startDrawL,cyc,DrawEnd,ResEnd);
  
- input clk,resetData,startDrawR,startDrawC,startDrawL,startWaitC,startWaitR,startWaitL,cyc;
+ input clk,resetData,startDrawR,startDrawC,startDrawL,startWaitC,startWaitR,startWaitL,cyc,DrawEnd,ResEnd;
  
  //output flags
  output reg DoneDrawingR,DoneDrawingC,DoneDrawingL;
@@ -508,13 +566,9 @@ always@(posedge clk)
  
 
  reg [27:0] timer1;
- reg [27:0] timer2;
- reg [27:0] timer3;
  
  wire clear1;
- wire clear2;
- wire clear3;
- 
+
  //counts to 4 seconds Center
  
 	always@(posedge clk)
@@ -537,40 +591,7 @@ always@(posedge clk)
 	end
 
 	assign clear1 = DoneWaitingC;
-//	//assign DoneWaitingC = (timer1 == 28'd100000000) ? 1'b1 : 1'b0;
-//	
-// //counts to 4 seconds Right
-// 
-//	always@(posedge clk)
-//	begin
-//	if(clear2 | resetData)
-//			timer2 <= 28'd0;
-//			DoneWaitingR <= 1'b0;	
-//	if(startWaitR)
-//			timer2 <= timer2 + 1'b1;
-//	if(timer1 == 28'd100000000)
-//	      DoneWaitingR <= 1'b1;
-//	end
-//
-//	assign clear2 = DoneWaitingR;
-//	//assign DoneWaitingR = (timer2 == 28'd100000000) ? 1'b1 : 1'b0;
-//
-//
-// //counts to 4 seconds Left
-// 
-//	always@(posedge clk)
-//	begin
-//	if(clear3 | resetData)
-//			timer3 <= 28'd0;	
-//			DoneWaitingL <= 1'b0;
-//	if(startWaitL)
-//			timer3 <= timer3 + 1'b1;
-//	if(timer1 == 28'd100000000)
-//	      DoneWaitingL <= 1'b1;
-//	end
-//
-//	assign clear3 = DoneWaitingL;
-//	//assign DoneWaitingL = (timer3 == 28'd100000000) ? 1'b1 : 1'b0;
+
 
 //---------------------------------------------------------
  always@(posedge clk)
@@ -611,6 +632,31 @@ always@(posedge clk)
 								DoneDrawingL <= 1'b0;
 							end
 					end
+					
+				if(ResEnd)
+					begin
+						Xout <= 9'd0;
+						Yout <= 8'd0;
+						Drawcount <= 16'd0;
+					end
+						
+				if(DrawEnd)
+					begin
+						if(Xout == 9'd320 && Yout < 8'd240)
+							begin
+							Xout <= 9'd0;
+							Yout <= Yout + 1'b1;
+							end
+						if(Yout == 8'd240)
+							begin
+	                   
+							end
+						if(Xout < 9'd320 && Yout < 8'd240)
+							begin
+								Drawcount <= Drawcount + 1'b1;
+								Xout <= Xout + 1'b1;
+							end
+					end		
 					
 	end
 	
