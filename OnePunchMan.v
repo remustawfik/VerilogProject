@@ -1,5 +1,5 @@
 
-module OnePunchMan(CLOCK_50,KEY,LEDR,SW,GPIO_0,HEX0,HEX1,HEX5,HEX6,VGA_CLK,VGA_HS,VGA_VS,VGA_BLANK_N,VGA_SYNC_N,VGA_R,VGA_G,VGA_B);
+module OnePunchMan(CLOCK_50,KEY,LEDR,SW,GPIO_0,HEX0,HEX1,HEX5,HEX4,VGA_CLK,VGA_HS,VGA_VS,VGA_BLANK_N,VGA_SYNC_N,VGA_R,VGA_G,VGA_B);
 
 input CLOCK_50;
 input [3:0] KEY;
@@ -19,7 +19,7 @@ output [9:0] LEDR;
 output [6:0] HEX0;
 output [6:0] HEX1;
 output [6:0] HEX5;
-output [6:0] HEX6;
+output [6:0] HEX4;
 
 //Drawing the Boxer
 wire [8:0] xVGA;
@@ -53,17 +53,30 @@ wire Swait,SDraw,Sreset,SResEnd;
 
 //Hit flags
 wire hit;
-reg [4:0]score;
-assign hit = ~KEY[2];
+reg [4:0]score1;
+reg [4:0]score2;
+assign hit = GPIO_0[1];
+assign LEDR[0] = hit;
 
 always@(posedge hit)
 begin
 	if(start)
-	score <= 4'b0000;
-	else if(hit)
-	score <= score + 4'b0001;
+		begin
+		score1 <= 4'b0000;
+		score2 <= 4'b0000;
+		end
+	else if(hit && score1<4'b1001)
+		score1 <= score1 + 4'b0001;
+	else if((score1 == 4'b1001)  && hit)
+		begin
+		score1 <= 4'b0000;
+		score2 <= score2 + 4'b0001;
+		end
 	else
-	score <= score;
+		begin
+		score1 <= score1;
+		score2 <= score2;
+		end
 end 
 
 //calling sprites
@@ -74,8 +87,7 @@ BoxerCenter cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
 BoxerRight kitty(address,CLOCK_50,3'b000,1'b0,addressColourRight);
 BoxerLeft  kittycat(address,CLOCK_50,3'b000,1'b0,addressColourLeft);
 Hit        doggo(address,CLOCK_50,3'b000,1'b0,addressColourHit);
-//SS         PUPPERssss(BGcounter,CLOCK_50,3'b000,1'b0,colourBG);
-Ending     dogger(address,CLOCK_50,3'b000,1'b0,addressEnding);
+EndScreenNe  dogger(address,CLOCK_50,3'b000,1'b0,addressEnding);
 
 //---------------------------------------------------------------------
 
@@ -130,7 +142,7 @@ assign plot = 1'b1;
 		end
 		else if(HexEnabler2 == 1'b1)
 			HexWrite2 <= HexWrite2 + 1'b1;
-	   else if(HexWrite2 == 4'b0011)
+	   else if(HexWrite2 == 4'b0110)
 		   endSignal <= 1'b1;
 		else
 			HexWrite2 <= HexWrite2;
@@ -163,7 +175,8 @@ datapath PUPPER(CLOCK_50,Sreset,Ddraw,Dwait,xVGA,yVGA,address,Swait,SDraw,endSig
 
 hex_decoder BOI(HexWrite1, HEX0);
 hex_decoder BOII(HexWrite2, HEX1);
-hex_decoder BOIII(score, HEX5);
+hex_decoder BOIII(score1, HEX4);
+hex_decoder BOIIII(score2, HEX5);
 			
 endmodule 
 
@@ -223,7 +236,24 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetC: next_state =  S_Wait_Center;
 				
-				S_Wait_Center: next_state = HitS ? S_ResetHitOne: (DoneWait ? S_Right : S_Wait_Center);
+				S_Wait_Center: if(HitS)
+										begin
+										next_state = S_ResetHitOne;
+										end
+									else if(DoneWait)
+									   begin
+										next_state = S_Right;
+										end
+									else if(endS)
+									   begin
+										next_state = S_ResetEnd;
+										end
+				               else
+									   begin
+										next_state = S_Wait_Center;
+										end
+				
+				//HitS ? S_ResetHitOne : (DoneWait ? S_Right : S_Wait_Center);
 				
 				//----------------------------------
 				
@@ -231,7 +261,24 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetR: next_state =  S_Wait_Right;
 				
-				S_Wait_Right: next_state = DoneWait ? S_Centertoo : S_Wait_Right;
+				S_Wait_Right:  if(HitS)
+										begin
+										next_state = S_ResetHitOne;
+										end
+									else if(DoneWait)
+										begin
+										next_state = S_Centertoo;
+										end
+									else if(endS)
+									   begin
+										next_state = S_ResetEnd;
+										end
+									else
+										begin
+										next_state = S_Wait_Right;
+										end
+				
+				//HitS ? S_ResetHitOne : (DoneWait ? S_Centertoo : S_Wait_Right);
 			
 				//-----------------------------------
 				
@@ -239,7 +286,24 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetCtoo: next_state =  S_Wait_Ctoo;
 				
-				S_Wait_Ctoo: next_state = DoneWait ? S_Left : S_Wait_Ctoo;
+				S_Wait_Ctoo:  if(HitS)
+										begin
+										next_state = S_ResetHitOne;
+										end
+									else if(DoneWait)
+										begin
+										next_state = S_Left;
+										end
+									else if(endS)
+									   begin
+										next_state = S_ResetEnd;
+										end
+									else
+										begin
+										next_state = S_Wait_Ctoo;
+										end 	
+				
+				//HitS ? S_ResetHitOne : (DoneWait ? S_Left : S_Wait_Ctoo);
 				
 				//------------------------------------
 				
@@ -247,7 +311,24 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetL: next_state =  S_Wait_Left;
 				
-				S_Wait_Left: next_state = DoneWait ? S_Done : S_Wait_Left;
+				S_Wait_Left: if(HitS)
+										begin
+										next_state = S_ResetHitOne;
+										end
+									else if(DoneWait)
+										begin
+										next_state = S_Done;
+										end
+									else if(endS)
+									   begin
+										next_state = S_ResetEnd;
+										end
+									else
+										begin
+										next_state = S_Wait_Left;
+										end  
+				
+				//HitS ? S_ResetHitOne : (DoneWait ? S_Done : S_Wait_Left);
 				
 				//-------------------------------------
 				
@@ -537,7 +618,7 @@ always@(posedge clk)
 			end
 	if(startWait)
 			timer1 <= timer1 + 1'b1;
-	if(timer1 == 28'd100000000)
+	if(timer1 == 28'd50000000)
 			begin
 	      DoneWaiting <= 1'b1;
 			end
@@ -580,22 +661,22 @@ always@(posedge clk)
 				if(ResEnd)
 					begin
 						Xout <= 9'd0;
-						Yout <= 8'd10;
+						Yout <= 8'd0;
 						Drawcount <= 16'd0;
 					end
 						
 				if(DrawEnd)
 					begin
-						if(Xout == 9'd320 && Yout < 8'd230)
+						if(Xout == 9'd320 && Yout < 8'd240)
 							begin
 								Xout <= 9'd0;
 								Yout <= Yout + 1'b1;
 							end
-						if(Yout == 8'd230)
+						if(Yout == 8'd240)
 							begin
 	                   
 							end
-						if(Xout < 9'd320 && Yout < 8'd230)
+						if(Xout < 9'd320 && Yout < 8'd240)
 							begin
 								Drawcount <= Drawcount + 1'b1;
 								Xout <= Xout + 1'b1;
