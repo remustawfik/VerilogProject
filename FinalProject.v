@@ -33,11 +33,12 @@ wire [2:0] addressColourCenter;
 wire [2:0] addressColourRight;
 wire [2:0] addressColourLeft;
 wire [2:0] addressColourHit;
-wire [2:0] addressEnding;
 wire [2:0] addressMissed;
 wire [2:0] addressCenterShuffle;
 wire [2:0] addressRightShuffle;
 wire [2:0] addressLeftShuffle;
+wire [2:0] addressEndWin;
+wire [2:0] addressEndLose;
 reg endSignal;
 
 //variables to count to 60 
@@ -60,24 +61,18 @@ wire [3:0] SelectImage;
 wire Swait,SwaitHit,SDraw,Sreset,SResEnd;
 
 //Hit flags
-wire hitCenter,hitRight;
+wire hitCenter,hitRight,hitLeft;
 reg [3:0]scorePlayer1;
 reg [3:0]scorePlayer2;
 reg [3:0]scoreEnemy1;
 reg [3:0]scoreEnemy2;
 wire correct;
 wire missed;
-//wire value;
-//assign hitCenter = GPIO_0[1];
-//assign hitRight = GPIO_0[3];
-assign hitCenter = ~KEY[2];
-assign hitRight = ~KEY[3];
-assign LEDR[0] = hitCenter;
-assign LEDR[1] = hitRight;
-//assign value = hitCenter | hitRight;
+assign hitCenter = ~GPIO_0[1];
+assign hitRight = ~GPIO_0[5];
+assign hitLeft =~GPIO_0[3];
 
-
-always@(posedge correct)
+always@(posedge correct or posedge start)
 begin
 	if(start)
 		begin
@@ -98,7 +93,7 @@ begin
 		end
 end 
 
-always@(posedge missed)
+always@(posedge missed or posedge start)
 begin
 	if(start)
 		begin
@@ -120,18 +115,19 @@ begin
 end 
 
 //calling sprites
-assign reset = KEY[0];
-assign start = ~KEY[1];
+assign reset = ~SW[0];
+assign start = ~KEY[0];
 
 Center cat(address,CLOCK_50,3'b000,1'b0,addressColourCenter);
 BoxerRight kitty(address,CLOCK_50,3'b000,1'b0,addressColourRight);
 BoxerLeft  kittycat(address,CLOCK_50,3'b000,1'b0,addressColourLeft);
 Hit doggo(address,CLOCK_50,3'b000,1'b0,addressColourHit);
-EndScreen dogger(address,CLOCK_50,3'b000,1'b0,addressEnding);
+EndLose dogger(address,CLOCK_50,3'b000,1'b0,addressEndLose);
 Missed puppier(address,CLOCK_50,3'b000,1'b0,addressMissed);
 JiggleCenter puppier2(address,CLOCK_50,3'b000,1'b0,addressCenterShuffle);
 RightShuffle puppier3(address,CLOCK_50,3'b000,1'b0,addressRightShuffle);
 LeftShuffle puppier4(address,CLOCK_50,3'b000,1'b0,addressLeftShuffle);
+EndWin doggier(address,CLOCK_50,3'b000,1'b0,addressEndWin);
 
 //---------------------------------------------------------------------
 
@@ -139,7 +135,7 @@ always@(*)
 begin
 	case(SelectImage)
 	
-	4'b0000: colourVGA = addressEnding;
+	4'b0000: colourVGA = addressEndLose;
 	4'b0001: colourVGA = addressColourCenter;
 	4'b0010: colourVGA = addressColourRight;
 	4'b0011: colourVGA = addressColourLeft;
@@ -148,6 +144,7 @@ begin
 	4'b0101: colourVGA = addressCenterShuffle;
 	4'b0111: colourVGA = addressRightShuffle;
 	4'b1000: colourVGA = addressLeftShuffle;
+	4'b1001: colourVGA = addressEndWin;
 	
 	endcase
 
@@ -206,6 +203,22 @@ assign plot = 1'b1;
 		else
 			HexWrite2 <= HexWrite2;
 	end
+	
+reg endWin;
+wire [7:0] PlayerScore;
+wire [7:0] EnemyScore;
+assign PlayerScore = {scorePlayer2,scorePlayer1};
+assign EnemyScore = {scoreEnemy2,scoreEnemy1};
+
+	always@(posedge CLOCK_50)
+	begin
+		if(start)
+		endWin <= 1'b0;
+		else if(PlayerScore > EnemyScore)
+		endWin <= 1'b1;
+		else
+		endWin <= 1'b0;
+	end
 
 //calls modules
 vga_adapter VGA(
@@ -229,7 +242,7 @@ vga_adapter VGA(
 		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
 		defparam VGA.BACKGROUND_IMAGE = "Background.mif";
 		
-control pupperz(CLOCK_50,reset,Ddraw,Dwait,DWaitHit,start,Sreset,SDraw,Swait,SwaitHit,SelectImage,endSignal,SResEnd,hitCenter,hitRight,correct,missed);
+control pupperz(CLOCK_50,reset,Ddraw,Dwait,DWaitHit,start,Sreset,SDraw,Swait,SwaitHit,SelectImage,endSignal,SResEnd,hitCenter,hitRight,hitLeft,correct,missed,endWin);
 datapath PUPPER(CLOCK_50,Sreset,Ddraw,Dwait,DWaitHit,xVGA,yVGA,address,Swait,SwaitHit,SDraw,endSignal,SResEnd);
 
 hex_decoder BOI(HexWrite1, HEX0);
@@ -242,9 +255,9 @@ hex_decoder BOIIIIII(scoreEnemy2,HEX5);
 endmodule 
 
 //-------------------------------------------------------------------------------------
-module control(clk,reset,DoneDraw,DoneWait,DoneWaitHit,PlotCtrl,startReset,startDraw,startWait,startWaitHit,SelectImag,endS,startResEnd,HitCenter,HitRight,gotHit,gotMissed);
+module control(clk,reset,DoneDraw,DoneWait,DoneWaitHit,PlotCtrl,startReset,startDraw,startWait,startWaitHit,SelectImag,endS,startResEnd,HitCenter,HitRight,HitLeft,gotHit,gotMissed,endwin);
 
-input clk,DoneDraw,PlotCtrl,DoneWait,DoneWaitHit,reset,endS,HitCenter,HitRight;
+input clk,DoneDraw,PlotCtrl,DoneWait,DoneWaitHit,reset,endS,HitCenter,HitRight,HitLeft,endwin;
 output reg startReset,startResEnd,startDraw,startWait,startWaitHit;
 output reg [3:0] SelectImag;
 output reg gotHit,gotMissed;
@@ -319,8 +332,9 @@ reg [5:0] current_state, next_state;
 					 S_WaitMissed     = 6'd48,
 					 //----------------------
 					 S_ResetEnd       = 6'd49,
-					 S_EndScreen      = 6'd50,
-					 S_Done           = 6'd51;
+					 S_EndScreenWin   = 6'd50,
+					 S_EndScreenLose  = 6'd51,
+					 S_Done           = 6'd52;
 					 
 					 
 	always@(*)
@@ -339,7 +353,8 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetCOne: next_state =  S_Wait_CenterOne;           
 				
-				S_Wait_CenterOne: if(HitCenter)
+				S_Wait_CenterOne: 
+									if(HitCenter)
 										begin
 										gotHit = 1'b1;
 									   gotMissed = 1'b0;
@@ -351,12 +366,30 @@ reg [5:0] current_state, next_state;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Center_ShuOne;
+										end
 									else if(endS)
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CenterOne;
+										end
 				
 				//----------------------------------
 				
@@ -377,12 +410,30 @@ reg [5:0] current_state, next_state;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_CenterTwo;
+										end
 									else if(endS)
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CShuOne;
+										end
 				
 				//-----------------------------------------		
 				
@@ -403,12 +454,30 @@ reg [5:0] current_state, next_state;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Center_ShuT;
+										end
 									else if(endS)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CenterTwo;
+										end
 										
 				//----------------------------------
 				S_Center_ShuT: next_state = DoneDraw ? S_ResetShuT : S_Center_ShuT;
@@ -428,12 +497,30 @@ reg [5:0] current_state, next_state;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_RightOne;
+										end
 									else if(endS)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CShuT;
+										end
 				//-----------------------------------------		
 										
 				//The Right Cycle
@@ -442,7 +529,8 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetROne: next_state =  S_Wait_RightOne;
 				
-				S_Wait_RightOne:  if(HitRight)
+				S_Wait_RightOne:  
+									if(HitRight)
 										begin
 										gotHit = 1'b1;
 										gotMissed = 1'b0;
@@ -454,16 +542,28 @@ reg [5:0] current_state, next_state;
 										gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Right_Shu;
 										end
 									else if(endS)
 									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
 										end
 									else
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_RightOne;
 										end
 										
@@ -474,24 +574,43 @@ reg [5:0] current_state, next_state;
 				S_ResetRShu: next_state =  S_Wait_RightShu;           
 				
 				S_Wait_RightShu: 
-									if(HitCenter)
+				
+									if(HitRight)
 										begin
 										gotHit = 1'b1;
 									   gotMissed = 1'b0;
 										next_state = S_ResetHitOne;
 										end
-									else if(HitRight)
+									else if(HitCenter)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
+									else if(HitLeft)
 										begin
 										gotHit = 1'b0;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
 									else if(DoneWait)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_RightTwo;
+										end
 									else if(endS)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_RightShu;
+										end
 				
 				//-----------------------------------------------------		
 				S_RightTwo: next_state = DoneDraw ? S_ResetRTwo : S_RightTwo;
@@ -511,16 +630,28 @@ reg [5:0] current_state, next_state;
 										gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_CenterThree;
 										end
 									else if(endS)
 									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
 										end
 									else
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_RightTwo;
 										end
 			   //------------------------------------------------------
@@ -542,16 +673,28 @@ reg [5:0] current_state, next_state;
 										gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Center_ShuTwo;
 										end
 									else if(endS)
 									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
 										end
 									else
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CThree;
 										end 	
 	
@@ -575,12 +718,30 @@ reg [5:0] current_state, next_state;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_CenterFour;
+										end
 									else if(endS)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CShuTwo;
+										end
 				
 				//-----------------------------------------		
 				
@@ -601,12 +762,30 @@ reg [5:0] current_state, next_state;
 									   gotMissed = 1'b1;
 										next_state = S_ResetMissedOne;
 										end
+									else if(HitLeft)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
+										end
 									else if(DoneWait)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_LeftOne;
+										end
 									else if(endS)
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
+										end
 				               else
+									   begin
+									   gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_CFour;
+										end
 										
 				//----------------------------------------------
 				
@@ -614,11 +793,19 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetLOne: next_state =  S_Wait_LeftOne;
 				
-				S_Wait_LeftOne:   if(HitRight)
+				S_Wait_LeftOne:   
+				
+									if(HitLeft)
 										begin
 										gotHit = 1'b1;
-										gotMissed = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetHitOne;
+										end
+									else if(HitRight)
+										begin
+										gotHit = 1'b0;
+										gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
 										end
 									else if(HitCenter)
 									   begin
@@ -628,14 +815,20 @@ reg [5:0] current_state, next_state;
 										end
 									else if(DoneWait)
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_LeftShu;
 										end
 									else if(endS)
 									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
 										end
 									else
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_LeftOne;
 										end  
 				
@@ -646,11 +839,18 @@ reg [5:0] current_state, next_state;
 				S_ResetLShu: next_state =  S_Wait_LeftShu;
 				
 				S_Wait_LeftShu:  
-									if(HitRight)
+				
+									if(HitLeft)
 										begin
 										gotHit = 1'b1;
-										gotMissed = 1'b0;
-										next_state = S_ResetHitOne;
+									   gotMissed = 1'b0;
+										next_state =  S_ResetHitOne;
+										end
+									else if(HitRight)
+										begin
+										gotHit = 1'b0;
+										gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
 										end
 									else if(HitCenter)
 									   begin
@@ -660,14 +860,20 @@ reg [5:0] current_state, next_state;
 										end
 									else if(DoneWait)
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_LeftTwo;
 										end
 									else if(endS)
 									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
 										end
 									else
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_LeftShu;
 										end  
 				
@@ -677,12 +883,19 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetLTwo: next_state =  S_Wait_LeftTwo;
 				
-				S_Wait_LeftTwo:   
-									if(HitRight)
+				S_Wait_LeftTwo:  
+			
+									if(HitLeft)
 										begin
 										gotHit = 1'b1;
-										gotMissed = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetHitOne;
+										end
+									else if(HitRight)
+										begin
+										gotHit = 1'b0;
+										gotMissed = 1'b1;
+										next_state = S_ResetMissedOne;
 										end
 									else if(HitCenter)
 									   begin
@@ -692,14 +905,20 @@ reg [5:0] current_state, next_state;
 										end
 									else if(DoneWait)
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Done;
 										end
 									else if(endS)
 									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_ResetEnd;
 										end
 									else
 										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
 										next_state = S_Wait_LeftTwo;
 										end  
 				
@@ -711,8 +930,25 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetHitTwo: next_state = S_WaitHit;
 				
-				S_WaitHit: next_state = DoneWaitHit ? S_StartAnimation: S_WaitHit;
-				
+				S_WaitHit: 
+								if(DoneWaitHit && !HitLeft && !HitCenter && !HitRight)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
+										next_state = S_StartAnimation;
+										end
+							   else if(endS)
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
+										next_state = S_ResetEnd;
+										end
+								else
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
+										next_state = S_WaitHit;
+										end  
 				//--------------------------------------
 				
 				S_ResetMissedOne: next_state = S_Missed;
@@ -721,12 +957,31 @@ reg [5:0] current_state, next_state;
 				
 				S_ResetMissedTwo: next_state = S_WaitMissed;
 				
-				S_WaitMissed: next_state = DoneWaitHit ? S_StartAnimation: S_WaitMissed;
-					
+				S_WaitMissed:
+								if(DoneWaitHit && !HitLeft && !HitCenter && !HitRight)
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
+										next_state = S_StartAnimation;
+										end
+							   else if(endS)
+									   begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
+										next_state = S_ResetEnd;
+										end
+								else
+										begin
+										gotHit = 1'b0;
+									   gotMissed = 1'b0;
+										next_state = S_WaitMissed;
+										end  
 				//--------------------------------------
-				S_ResetEnd: next_state = S_EndScreen;
+				S_ResetEnd: next_state = endwin ? S_EndScreenWin : S_EndScreenLose;
 				
-				S_EndScreen: next_state = S_EndScreen;
+				S_EndScreenLose: next_state = S_EndScreenLose;
+				
+				S_EndScreenWin: next_state = S_EndScreenWin;
 				
 				S_Done: next_state= S_StartAnimation;
 				
@@ -803,88 +1058,73 @@ reg [5:0] current_state, next_state;
 	end
 	
 	S_ResetShuOne: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_CShuOne: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
    //----------------------------
 	
 	S_CenterTwo: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetCTwo: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_CenterTwo: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	//----------------------------
 	
 	S_Center_ShuT: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0101;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetShuT: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_CShuT: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
@@ -905,30 +1145,25 @@ reg [5:0] current_state, next_state;
 	end
 	
    S_ResetROne: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
-	SelectImag = 4'b0011;
+	SelectImag = 4'b0111;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_RightOne: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
-	SelectImag = 4'b0011;
+	SelectImag = 4'b0111;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	//---------------------------------	
 
    S_Right_Shu: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
@@ -938,30 +1173,25 @@ reg [5:0] current_state, next_state;
 	end
 	
    S_ResetRShu: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
-	SelectImag = 4'b0011;
+	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_RightShu: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
-	SelectImag = 4'b0011;
+	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	//---------------------------------	
 
    S_RightTwo: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
@@ -971,110 +1201,92 @@ reg [5:0] current_state, next_state;
 	end
 	
    S_ResetRTwo: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_RightTwo: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
-	SelectImag = 4'b0011;
+	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
+	
 	//---------------------------------	
 	S_CenterThree: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetCThree: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_CThree: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	//----------------------------
 	
 	S_Center_ShuTwo: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0101;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetShuTwo: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_CShuTwo: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0010;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
    //----------------------------
 	
 	S_CenterFour: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetCFour: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
@@ -1084,74 +1296,62 @@ reg [5:0] current_state, next_state;
 	end
 	
 	S_Wait_CFour: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	//---------------------------------	
 	S_LeftOne: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetLOne: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_LeftOne: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
+	
 	//---------------------------------
 	S_LeftShu: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b1000;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetLShu: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Wait_LeftShu: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
@@ -1162,18 +1362,15 @@ reg [5:0] current_state, next_state;
 	end
 	//---------------------------------	
 	S_LeftTwo: begin
-
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetLTwo: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
@@ -1183,109 +1380,90 @@ reg [5:0] current_state, next_state;
 	end
 	
 	S_Wait_LeftTwo: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b1;
 	SelectImag = 4'b0011;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
+	
 	//---------------------------------
 	S_ResetHitOne:begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0100;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Hit:begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0100;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetHitTwo:begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_WaitHit:begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b1;
-	
 	end
 	
 	//------------------------------
-	
 	S_ResetMissedOne:begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0110;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_Missed:begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b1;
 	startWait = 1'b0;
 	SelectImag = 4'b0110;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_ResetMissedTwo:begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b0;
-	
 	end
 	
 	S_WaitMissed:begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
 	startWaitHit = 1'b1;
-	
 	end
 	
 	//------------------------------
 	S_ResetEnd: begin
-	
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b0;
@@ -1294,31 +1472,33 @@ reg [5:0] current_state, next_state;
 	startWaitHit = 1'b0;
 	end
 	
-	S_EndScreen: begin
+	S_EndScreenWin: begin
+	startReset = 1'b0;
+	startDraw = 1'b0;
+	startWait = 1'b0;
+	SelectImag = 4'b1001;
+	startResEnd = 1'b0;
+	end 
 	
+	S_EndScreenLose: begin
 	startReset = 1'b0;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0000;
 	startResEnd = 1'b0;
-
 	end
 	
 	S_Done: begin
-	
 	startReset = 1'b1;
 	startDraw = 1'b0;
 	startWait = 1'b0;
 	SelectImag = 4'b0001;
 	startResEnd = 1'b0;
-	
 	end
-	
 endcase
 end
 
 // current_state registers
-  
 always@(posedge clk)
   
    begin: state_FFs
@@ -1382,7 +1562,7 @@ always@(posedge clk)
 			end
 	if(startWait)
 			timer1 <= timer1 + 1'b1;
-	if(timer1 == 28'd10000000)
+	if(timer1 == 28'd13500000)
 			begin
 	      DoneWaiting <= 1'b1;
 			end
