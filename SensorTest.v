@@ -1,4 +1,4 @@
-module FuckMeUpFirst(LEDR,GPIO_1,GPIO_0,CLOCK_50);
+module SensorTest(LEDR,GPIO_1,GPIO_0,CLOCK_50);
 input [35:0]GPIO_1;
 input CLOCK_50;
 input [35:0]GPIO_0;
